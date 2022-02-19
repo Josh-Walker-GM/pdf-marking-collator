@@ -15,4 +15,4 @@ All marks with the same question id are averaged together and the result annotat
 
 --
 
-This was orginally written as a tool for collating marked undergraduate assignments.
+This was orginally written as a tool for collating marked undergraduate assignments. It's level of functionality reflects my requirements at the time and provides a base to augment. 
