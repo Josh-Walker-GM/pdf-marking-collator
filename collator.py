@@ -4,6 +4,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Series, Reference
+from openpyxl import load_workbook
 
 import glob
 import os
@@ -19,6 +20,8 @@ class MarkComment():
     mark: float = None
     
     def __init__(self, raw_annotation):
+        if raw_annotation == None:
+            return
         self.raw_annotation = raw_annotation
         self.author = raw_annotation.info["title"].strip()
         self.question_id = raw_annotation.info["content"].strip().split(" ")[1]
@@ -53,7 +56,7 @@ def get_arguments():
     parser.add_argument("--comment-prefix-flag", type=str, help="comment prefix which flags marks", default="!#")
     parser.add_argument("--alias-authors", type=bool, help="replace author names with alias", default=True, action=argparse.BooleanOptionalAction)
     parser.add_argument("--generate-spreadsheet", type=bool, help="generate spreadsheet of extracted marks", default=False, action=argparse.BooleanOptionalAction)
-    # parser.add_argument("--use_spreadsheet", type=bool, help="use spreadsheet of marks inplace of pdf markings")
+    parser.add_argument("--use-spreadsheet", type=bool, help="use spreadsheet of marks inplace of pdf markings", default=False, action=argparse.BooleanOptionalAction)
     return parser.parse_args()
 
 def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks: list[list[MarkComment]]):
@@ -108,6 +111,23 @@ def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks
 
     wb.save(filename = os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
 
+def read_spreadsheet(args, authors, question_ids):
+    wb = load_workbook(os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
+    ws = wb.active
+
+    overriding_marks: list[list[MarkComment]] = []
+    for col in range(len(authors)):
+        marks: list[MarkComment] = []
+        for row in range(len(question_ids)):
+            mark_comment = MarkComment(None)
+            mark_comment.author = authors[col]
+            mark_comment.question_id = question_ids[row]
+            mark_comment.mark = ws.cell(row+4, col+3).value
+            marks.append(mark_comment)
+        overriding_marks.append(marks)
+
+    return overriding_marks
+
 def main():
 
     # set logging format
@@ -124,6 +144,11 @@ def main():
     # validate input file
     if not os.path.exists(os.path.join(os.getcwd(), args.input_dir, args.input_file)):
         logging.error("Input file \"{}\" does not exist!".format(os.path.join(os.getcwd(), args.input_dir, args.input_file)))
+        exit(-1)
+
+    # validate against use and generation of spreadsheets
+    if args.generate_spreadsheet and args.use_spreadsheet:
+        logging.error("Cannot use overriding spreadsheet and generate spreadsheet features at the same time!")
         exit(-1)
 
     logging.info("Collating all pdf's in \"{}\" using \"{}\" as base".format(os.path.join(os.getcwd(), args.input_dir), os.path.join(os.getcwd(), args.input_dir, args.input_file)))
@@ -171,6 +196,18 @@ def main():
         aliases: dict[str, str] = {}
         for i in range(len(authors)):
             aliases[authors[i]] = "Marker #{}".format(i+1)
+
+    if args.use_spreadsheet:
+        logging.info("Using spreadsheet to override marking values.")
+
+        # fix this
+        question_ids: list[str] = []
+        for document_marks in all_marks:
+            for mark in document_marks:
+                if mark.question_id not in question_ids:
+                    question_ids.append(mark.question_id)
+        question_ids.sort()
+        all_marks = read_spreadsheet(args, authors, question_ids)
 
     averaged_marks: dict[str, float] = {}
     extracted_marks: dict[str, list[float]] = {}
