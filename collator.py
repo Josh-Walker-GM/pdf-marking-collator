@@ -1,18 +1,16 @@
 
 import fitz
-import sys
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+from openpyxl.chart import BarChart, Series, Reference
+
 import glob
 import os
 import collections
 import statistics
 import argparse
 import logging
-
-"""
-input file name
-output file name
-pdf collection directory
-"""
 
 class MarkComment():
     raw_annotation = None
@@ -54,9 +52,61 @@ def get_arguments():
     parser.add_argument("--output-file", type=str, help="name of output pdf", default="output.pdf")
     parser.add_argument("--comment-prefix-flag", type=str, help="comment prefix which flags marks", default="!#")
     parser.add_argument("--alias-authors", type=bool, help="replace author names with alias", default=True, action=argparse.BooleanOptionalAction)
-    # parser.add_argument("--generate_spreadsheet", type=bool, help="generate spreadsheet of extracted marks")
+    parser.add_argument("--generate-spreadsheet", type=bool, help="generate spreadsheet of extracted marks", default=False, action=argparse.BooleanOptionalAction)
     # parser.add_argument("--use_spreadsheet", type=bool, help="use spreadsheet of marks inplace of pdf markings")
     return parser.parse_args()
+
+def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks: list[list[MarkComment]]):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Extracted Marks"
+    
+    ws.cell(column=2, row=2, value="Alias")
+    ws.cell(column=2, row=3, value="Authors")
+    for col in range(len(authors)):
+        ws.cell(column=col+3, row=3, value="{0}".format(authors[col]))
+        if args.alias_authors:
+            ws.cell(column=col+3, row=2, value="{0}".format(aliases[authors[col]]))
+
+    question_ids: list[str] = []
+    for document_marks in all_marks:
+        for mark in document_marks:
+            if mark.question_id not in question_ids:
+                question_ids.append(mark.question_id)
+    question_ids.sort()
+
+    for i in range(len(question_ids)):
+        ws.cell(column=2, row=4+i, value="Q: {}".format(question_ids[i]))
+    ws.cell(column=2, row=4+len(question_ids)+1, value="Total")
+    
+    for i in range(len(authors)):
+        ws.cell(column=i+3, row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(3+i), 4, get_column_letter(3+i), 3+len(question_ids))
+    ws.cell(column=4+len(authors), row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(4+len(authors)), 4, get_column_letter(4+len(authors)), 3+len(question_ids))
+
+    for document_marks in all_marks:
+        for mark in document_marks:#
+            row_index = question_ids.index(mark.question_id)
+            column_index = authors.index(mark.author)
+            ws.cell(column=3+column_index, row=4+row_index).value = mark.mark
+
+    ws.cell(column=3+len(authors)+1, row=3, value="Average")
+    for i in range(len(question_ids)): 
+        ws.cell(column=3+len(authors)+1, row=4+i, value="=AVERAGE({}{}:{}{})".format("C", 4+i, get_column_letter(2+len(authors)), 4+i))
+
+    chart = BarChart()
+    chart.type = "col"
+    chart.style = 10
+    chart.y_axis.title = "Mark Given"
+    chart.x_axis.title = "Question ID"
+
+    data = Reference(ws, min_col=3, min_row=3, max_row=len(question_ids)+3, max_col=len(authors)+2)
+    cats = Reference(ws, min_col=2, min_row=4, max_row=len(question_ids)+3)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    chart.shape = 4
+    ws.add_chart(chart, "{}{}".format(get_column_letter(len(authors)+4), 2))
+
+    wb.save(filename = os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
 
 def main():
 
@@ -121,13 +171,6 @@ def main():
         aliases: dict[str, str] = {}
         for i in range(len(authors)):
             aliases[authors[i]] = "Marker #{}".format(i+1)
-        for document_comments in all_comments:
-            for comment in document_comments:
-                comment.author = aliases[comment.author]
-        for document_marks in all_marks:
-            for mark in document_marks:
-                if mark.author not in authors:
-                    mark.author = aliases[comment.author]
 
     averaged_marks: dict[str, float] = {}
     extracted_marks: dict[str, list[float]] = {}
@@ -156,7 +199,10 @@ def main():
             else:
                 logging.warning("Annotation of type {} is not supported.".format(comment.type))
                 continue
-            annotation.set_info(content=comment.text, title=comment.author)
+            if args.alias_authors:
+                annotation.set_info(content=comment.text, title=aliases[comment.author])
+            else:
+                annotation.set_info(content=comment.text, title=comment.author)
             annotation.set_flags(comment.flags)
             annotation.update()
 
@@ -176,6 +222,10 @@ def main():
 
     document.save(os.path.join(os.getcwd(), args.input_dir, args.output_file))
     document.close()
+
+    if args.generate_spreadsheet:
+        logging.info("Generating spreadsheet of extracted marks.")
+        generate_spreadsheet(args, authors, aliases, all_marks)
 
 
 if __name__ == "__main__":
