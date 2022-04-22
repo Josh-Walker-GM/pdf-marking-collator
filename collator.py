@@ -3,129 +3,179 @@ import fitz
 import sys
 import glob
 import os
-import shutil
+import collections
 import statistics
+import argparse
+import logging
 
+"""
+input file name
+output file name
+pdf collection directory
+"""
 
-class MarkerComment:
-    author: str
-    type: str
-    text: str
-    rect: list[float]
-    flags: int
-    page: int
-    original_raw_info: dict[str, str]
+class MarkComment():
+    raw_annotation = None
+    author: str = None
+    question_id: str = None
+    mark: float = None
+    
+    def __init__(self, raw_annotation):
+        self.raw_annotation = raw_annotation
+        self.author = raw_annotation.info["title"].strip()
+        self.question_id = raw_annotation.info["content"].strip().split(" ")[1]
+        self.mark = float(raw_annotation.info["content"].strip().split(" ")[2])
 
+    def __str__(self):
+        return "Question: {}, Mark: {}, Author: {}".format(self.question_id, self.mark, self.author)
+
+class FeedbackComment():
+    raw_annotation = None
+    author: str = None
+    text: str = None
+    page: int = None
+    flags = None
+    rect = None
+    type = None
+
+    def __init__(self, raw_annotation):
+        self.raw_annotation = raw_annotation
+        self.author = raw_annotation.info["title"].strip()
+        self.text = raw_annotation.info["content"].strip()
+        self.page = raw_annotation.parent.number
+        self.rect = [raw_annotation.rect[0], raw_annotation.rect[1], raw_annotation.rect[2], raw_annotation.rect[3]]
+        self.flags = raw_annotation.flags
+        self.type = raw_annotation.type[1]
+
+def get_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_dir", metavar="input-dir", type=str, help="directory of pdf collection")
+    parser.add_argument("input_file", metavar="input-file", type=str, help="name of base pdf")
+    parser.add_argument("--output-file", type=str, help="name of output pdf", default="output.pdf")
+    parser.add_argument("--comment-prefix-flag", type=str, help="comment prefix which flags marks", default="!#")
+    parser.add_argument("--alias-authors", type=bool, help="replace author names with alias", default=True, action=argparse.BooleanOptionalAction)
+    # parser.add_argument("--generate_spreadsheet", type=bool, help="generate spreadsheet of extracted marks")
+    # parser.add_argument("--use_spreadsheet", type=bool, help="use spreadsheet of marks inplace of pdf markings")
+    return parser.parse_args()
 
 def main():
-    # read cmd args
-    try:
-        pdf_dir = sys.argv[1]
-        pdf_base = sys.argv[2]
-        pdf_out = os.path.join(pdf_dir, "output.pdf")
-    except:
-        print("Two command line arguements required:\npython collator.py [directory] [base pdf]")
 
-    # generate list of given marker pdfs
-    pdf_list = glob.glob(os.path.join(pdf_dir, "*.pdf"))
-    pdf_list.remove(os.path.join(pdf_dir, pdf_base))
-    if pdf_out in pdf_list:
-        pdf_list.remove(pdf_out)
+    # set logging format
+    logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%d-%b-%y %H:%M:%S', level=logging.INFO)
 
-    print("Collating annotations on the following documents:")
-    for pdf in pdf_list:
-        print("  - " + pdf)
+    # extract agruments using argparse standard lib
+    args = get_arguments()
 
-    # container for all annotations
-    marking_annotations: list[MarkerComment] = []
-    marking_marks: dict[str, list[float]] = {}
+    # validate input directory
+    if not os.path.exists(os.path.join(os.getcwd(), args.input_dir)):
+        logging.error("Input directory \"{}\" does not exist!".format(os.path.join(os.getcwd(), args.input_dir)))
+        exit(-1)
 
-    # read each pdf and extract marks and comments
-    for pdf_path in pdf_list:
-        document = fitz.open(pdf_path)
+    # validate input file
+    if not os.path.exists(os.path.join(os.getcwd(), args.input_dir, args.input_file)):
+        logging.error("Input file \"{}\" does not exist!".format(os.path.join(os.getcwd(), args.input_dir, args.input_file)))
+        exit(-1)
+
+    logging.info("Collating all pdf's in \"{}\" using \"{}\" as base".format(os.path.join(os.getcwd(), args.input_dir), os.path.join(os.getcwd(), args.input_dir, args.input_file)))
+
+    # get list of pdf files in collection, remove base and output files
+    pdf_collection = glob.glob(os.path.join(os.getcwd(), args.input_dir, "*.pdf"))
+    pdf_collection.remove(os.path.join(os.getcwd(), args.input_dir, args.input_file))
+    if os.path.join(os.getcwd(), args.input_dir, args.output_file) in pdf_collection:
+        pdf_collection.remove(os.path.join(os.getcwd(), args.input_dir, args.output_file))
+
+    all_marks: list[list[MarkComment]] = []
+    all_comments: list[list[FeedbackComment]] = []
+
+    for pdf in pdf_collection:
+        logging.debug("Reading \"{}\"".format(pdf))
+        document = fitz.open(pdf)
+        document_marks: list[MarkComment] = []
+        document_comments: list[FeedbackComment] = []
         for page in document:
             for annotation in page.annots():
-                if annotation.info["content"].strip().startswith("!#"):
-                    marking_info = annotation.info["content"].strip().split()
-                    question_number = marking_info[1]
-                    question_mark = float("{:.2f}".format(float(marking_info[2])))
-                    if question_number in marking_marks:
-                        marking_marks[question_number].append(question_mark)
-                    else:
-                        marking_marks[question_number] = [question_mark]
+                if annotation.info["content"].strip().startswith(args.comment_prefix_flag):
+                    document_marks.append(MarkComment(annotation))
                 else:
-                    comment = MarkerComment()
-                    comment.author = annotation.info["title"].strip()
-                    comment.text = annotation.info["content"].strip()
-                    comment.type = annotation.type[1]
-                    comment.rect = [annotation.rect[0], annotation.rect[1], annotation.rect[2], annotation.rect[3]]
-                    comment.page = page.number
-                    comment.flags = annotation.flags
-                    comment.original_raw_info = annotation.info
-                    marking_annotations.append(comment)
+                    document_comments.append(FeedbackComment(annotation))
         document.close()
+        all_marks.append(document_marks)
+        all_comments.append(document_comments)
 
-    # replace marker names
-    origial_author_names = []
-    for ma in marking_annotations:
-        if ma.author not in origial_author_names:
-            origial_author_names.append(ma.author)
-    replacement_author_names = {}
-    for i in range(len(origial_author_names)):
-        replacement_author_names[origial_author_names[i]] = ("Marker #" + str(i+1))
-    for ma in marking_annotations:
-        ma.author = replacement_author_names[ma.author]
+    authors: list[str] = []
+    total_comments = 0
+    for document_marks in all_marks:
+        for mark in document_marks:
+            if mark.author not in authors:
+                authors.append(mark.author)
+    for document_comments in all_comments:
+        total_comments += len(document_comments)
+        for comment in document_comments:
+            if comment.author not in authors:
+                authors.append(comment.author)
 
-    print("A total of " + str(len(marking_annotations)) + " annotations have been extracted. There were " + str(len(origial_author_names)) + " authors which will be renamed.")
-    print("An annotated copy is being generated based on:\n  - " + os.path.join(pdf_dir, pdf_base))
+    logging.info("Extracted {} comments from {} authors from {} files.".format(total_comments, len(authors), len(pdf_collection)))
 
-    # create new output pdf from template one
-    shutil.copyfile(os.path.join(pdf_dir, pdf_base), pdf_out)
+    if args.alias_authors:
+        logging.info("Replacing author names.")
+        aliases: dict[str, str] = {}
+        for i in range(len(authors)):
+            aliases[authors[i]] = "Marker #{}".format(i+1)
+        for document_comments in all_comments:
+            for comment in document_comments:
+                comment.author = aliases[comment.author]
+        for document_marks in all_marks:
+            for mark in document_marks:
+                if mark.author not in authors:
+                    mark.author = aliases[comment.author]
 
-    # write comments to the output pdf
-    document = fitz.open(pdf_out)
-    for page in document:
-        for ma in marking_annotations:
-            if ma.page == page.number:
-                if ma.type == "Text" or ma.type == "FreeText":
-                    an = page.add_text_annot([ma.rect[0], ma.rect[1]], ma.text)
-                elif ma.type == "Highlight":
-                    an = page.add_highlight_annot(ma.rect)
-                elif ma.type == "StrikeOut":
-                    an = page.add_strikeout_annot(ma.rect)
-                else:
-                    print("Warning: unhandled annotation was ignored. Page: " + str(ma.page))
-                    continue
-                an.set_info(content=ma.text, title=ma.author, creationDate=ma.original_raw_info["creationDate"], modDate=ma.original_raw_info["modDate"])
-                an.set_flags(ma.flags)
-                an.update()
+    averaged_marks: dict[str, float] = {}
+    extracted_marks: dict[str, list[float]] = {}
+    total_averaged_mark = 0.0
+    for document_marks in all_marks:
+        for mark in document_marks:
+            if mark.question_id not in extracted_marks:
+                extracted_marks[mark.question_id] = []
+            extracted_marks[mark.question_id].append(mark.mark)
+    for question in extracted_marks:
+        averaged_marks[question] = statistics.mean(extracted_marks[question])
+        total_averaged_mark += averaged_marks[question]
 
-    # average the marks
-    marking_marks_mean = {}
-    marking_marks_total = 0
-    for question_number in marking_marks:
-        marking_marks_mean[question_number] = statistics.mean(marking_marks[question_number])
-        marking_marks_total += marking_marks_mean[question_number]
+    averaged_marks = collections.OrderedDict(sorted(averaged_marks.items()))
 
-    # write the total mark
-    first_page = document[0]
-    qa = first_page.add_text_annot([30.0, 30.0], "Overall mark: " + "{:.2f}".format(marking_marks_total))
-    qa.set_colors({"stroke": (1.0, 0.0, 0.0), "fill": None})
-    qa.set_info(title="Markers")
-    qa.update()
+    document = fitz.open(os.path.join(os.getcwd(), args.input_dir, args.input_file))
+    for document_comments in all_comments:
+        for comment in document_comments:
+            page = document[comment.page]
+            if comment.type == "Text" or comment.type == "FreeText":
+                annotation = page.add_text_annot([comment.rect[0], comment.rect[1]], comment.text, "Comment")
+            elif comment.type == "Highlight":
+                annotation = page.add_highlight_annot(comment.rect)
+            elif comment.type == "StrikeOut":
+                annotation = page.add_strikeout_annot(comment.rect)
+            else:
+                logging.warning("Annotation of type {} is not supported.".format(comment.type))
+                continue
+            annotation.set_info(content=comment.text, title=comment.author)
+            annotation.set_flags(comment.flags)
+            annotation.update()
 
-    # write the individual marks
-    for index, question_number in enumerate(marking_marks_mean):
-        qa = first_page.add_text_annot([30.0, 80.0 + 20.0*index], "Question " + question_number + ": " + "{:.2f}".format(marking_marks_mean[question_number]))
-        qa.set_info(title="Markers")
-        qa.set_colors({"stroke": (1.0, 0.0, 0.0), "fill": None})
-        qa.update()
+    page = document[0]
+    total_mark_annotation = page.add_text_annot([25.0, 25.0], "Overall mark: {:.2f}".format(total_averaged_mark))
+    total_mark_annotation.set_colors({"stroke": (1.0, 0.0, 0.0), "fill": None})
+    total_mark_annotation.set_info(title="Markers")
+    total_mark_annotation.update()
 
-    # save the annotated pdf
-    document.saveIncr()
+    index = 0
+    for key, value in averaged_marks.items():
+        mark_annotation = page.add_text_annot([25.0, 70.0 + 20.0*index], "Question {}: {:.2f}".format(key, value))
+        mark_annotation.set_info(title="Markers")
+        mark_annotation.set_colors({"stroke": (1.0, 0.0, 0.0), "fill": None})
+        mark_annotation.update()
+        index += 1
+
+    document.save(os.path.join(os.getcwd(), args.input_dir, args.output_file))
     document.close()
-
-    print("Annotated pdf succesfully created:\n  - " + pdf_out)
 
 
 if __name__ == "__main__":
