@@ -104,7 +104,7 @@ def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     chart.shape = 4
-    ws.add_chart(chart, "{}{}".format(get_column_letter(len(authors)+4), 2))
+    ws.add_chart(chart, "{}{}".format(get_column_letter(len(authors)+6), 2))
 
     wb.save(filename = os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
 
