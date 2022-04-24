@@ -16,8 +16,10 @@ import logging
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("directory_list", metavar="directory_list", nargs='+', help="list of directories to collate together")
-    parser.add_argument("--generate_combined_spreadsheet", metavar="generate-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="generate spreadsheet of all collated marks")
-    parser.add_argument("--use_combined_spreadsheet", metavar="use-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="use combined spreadsheet to override marks from collated pdfs")
+    parser.add_argument("--generate-individual-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="generate marks spreadsheet for individual collations")
+    parser.add_argument("--use-individual-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="use marks spreadsheet to override pdf marks for individual collations")
+    parser.add_argument("--generate-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="generate spreadsheet of all collated marks")
+    parser.add_argument("--use-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="use combined spreadsheet to override marks from collated pdfs")
     return parser.parse_args()
 
 # def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks: list[list[MarkComment]], question_ids: list[str]):
@@ -56,6 +58,11 @@ def main():
         logging.error("Cannot use overriding spreadsheet and generate spreadsheet features at the same time!")
         exit(-1)
 
+    # validate against usage of override with and generate individual spreadsheet flags together
+    if args.generate_individual_spreadsheet and args.use_individual_spreadsheet:
+        logging.error("Cannot use both use and generate individual spreadsheet flags together!")
+        exit(-1)
+
     # validate all collation directories are unique
     if len(args.directory_list) != len(set(args.directory_list)):
         logging.error("Collation directory list cannot contain duplicates!")
@@ -71,6 +78,13 @@ def main():
     for directory in args.directory_list:
         logging.info("Collating {}.".format(directory))
         command_string = "python collator.py {} {}.pdf".format(directory, os.path.basename(os.path.normpath(directory)))
+        
+        if args.generate_individual_spreadsheet:
+            command_string = "{} {}".format(command_string, "--generate-spreadsheet")
+
+        if args.use_individual_spreadsheet:
+            command_string = "{} {}".format(command_string, "--use-spreadsheet")
+
         return_code = subprocess.call(command_string, shell=True)
         if return_code != 0:
             logging.error("Collation of \"{}\" failed!".format(directory))
