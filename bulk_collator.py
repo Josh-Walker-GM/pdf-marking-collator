@@ -22,10 +22,52 @@ def get_arguments():
     parser.add_argument("--use-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="use combined spreadsheet to override marks from collated pdfs")
     return parser.parse_args()
 
-# def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks: list[list[MarkComment]], question_ids: list[str]):
-#     wb = Workbook()
-#     ws = wb.active
-#     wb.save(filename = os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
+def generate_combined_spreadsheet(args):
+    combined_wb = Workbook()
+    combined_ws = combined_wb.active
+
+    row_offset = 2
+    column_offset = 2
+
+    directory_index = 0
+    for directory in args.directory_list:
+        individual_wb = load_workbook(os.path.join(directory, "extracted_marks.xlsx"))
+        individual_ws = individual_wb.active
+
+        marker_count = 0
+        while True:
+            if individual_ws.cell(2, marker_count + 3).value is None:
+                break
+            marker_count += 1 
+
+        question_count = 0
+        while True:
+            if individual_ws.cell(question_count + 4, 2).value is None:
+                break
+            question_count += 1 
+
+        combined_ws.cell(row_offset, column_offset).value = directory
+        for row in range(question_count + 2):
+            for column in range(marker_count + 1):
+                combined_ws.cell(row_offset + row + 1, column_offset + column).value = individual_ws.cell(row + 2, column + 2).value
+
+        combined_ws.cell(row_offset + question_count + 4, column_offset).value = "Total"
+        for column in range(marker_count):
+            combined_ws.cell(row_offset + question_count + 4, column_offset + column + 1).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + column + 1), row_offset + 3, get_column_letter(column_offset + column + 1), row_offset + 2 + question_count)  
+        combined_ws.cell(row_offset + question_count + 4, column_offset + marker_count + 2).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + marker_count + 2), row_offset + 3, get_column_letter(column_offset + marker_count + 2), row_offset + 2 + question_count)  
+
+        combined_ws.cell(row_offset + 2, column_offset + marker_count + 2).value = "Average"
+        for row in range(question_count):
+            combined_ws.cell(row_offset + row + 3, column_offset + marker_count + 2).value = "=AVERAGE({}{}:{}{})".format(get_column_letter(column_offset + 1), row_offset + row + 3, get_column_letter(column_offset + marker_count + 3), row_offset + row + 3)  
+
+        # for i in range(len(authors)):
+        #     ws.cell(column=i+3, row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(3+i), 4, get_column_letter(3+i), 3+len(question_ids))
+        # ws.cell(column=4+len(authors), row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(4+len(authors)), 4, get_column_letter(4+len(authors)), 3+len(question_ids))
+
+        directory_index += 1
+        row_offset += question_count + 6
+
+    combined_wb.save(filename = os.path.join(os.getcwd(), "combined_extacted_marks.xlsx"))
 
 # def read_spreadsheet(args, authors, question_ids):
 #     wb = load_workbook(os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
@@ -75,20 +117,32 @@ def main():
             exit(-1)
 
     # Dev note: Calling of commands formed from user input is dangerous - should check/sanitise this...
-    for directory in args.directory_list:
-        logging.info("Collating {}.".format(directory))
-        command_string = "python collator.py {} {}.pdf".format(directory, os.path.basename(os.path.normpath(directory)))
+    # for directory in args.directory_list:
+    #     logging.info("Collating {}.".format(directory))
+    #     command_string = "python collator.py {} {}.pdf".format(directory, os.path.basename(os.path.normpath(directory)))
         
-        if args.generate_individual_spreadsheet:
-            command_string = "{} {}".format(command_string, "--generate-spreadsheet")
+    #     if args.generate_individual_spreadsheet:
+    #         command_string = "{} {}".format(command_string, "--generate-spreadsheet")
 
-        if args.use_individual_spreadsheet:
-            command_string = "{} {}".format(command_string, "--use-spreadsheet")
+    #     if args.use_individual_spreadsheet:
+    #         command_string = "{} {}".format(command_string, "--use-spreadsheet")
 
-        return_code = subprocess.call(command_string, shell=True)
-        if return_code != 0:
-            logging.error("Collation of \"{}\" failed!".format(directory))
-            exit(-1)
+    #     return_code = subprocess.call(command_string, shell=True)
+    #     if return_code != 0:
+    #         logging.error("Collation of \"{}\" failed!".format(directory))
+    #         exit(-1)
+
+    if args.generate_combined_spreadsheet:
+        logging.info("Generating combined spreadsheet.")
+
+        # validate individual projects have extracted marks spreadsheets
+        for directory in args.directory_list:
+            if not os.path.exists(os.path.join(directory, "extracted_marks.xlsx")):
+                logging.error("Extracted marks spreadsheet does not exist for \"{}\"!".format(directory))
+                exit(-1)
+
+        generate_combined_spreadsheet(args)
+
 
 if __name__ == "__main__":
     main()
