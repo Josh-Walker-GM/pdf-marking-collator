@@ -13,6 +13,7 @@ import statistics
 import argparse
 import logging
 
+
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("directory_list", metavar="directory_list", nargs='+', help="list of directories to collate together")
@@ -21,6 +22,7 @@ def get_arguments():
     parser.add_argument("--generate-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="generate spreadsheet of all collated marks")
     parser.add_argument("--use-combined-spreadsheet", type=bool, default=False, action=argparse.BooleanOptionalAction, help="use combined spreadsheet to override marks from collated pdfs")
     return parser.parse_args()
+
 
 def generate_combined_spreadsheet(args):
     combined_wb = Workbook()
@@ -38,13 +40,13 @@ def generate_combined_spreadsheet(args):
         while True:
             if individual_ws.cell(2, marker_count + 3).value is None:
                 break
-            marker_count += 1 
+            marker_count += 1
 
         question_count = 0
         while True:
             if individual_ws.cell(question_count + 4, 2).value is None:
                 break
-            question_count += 1 
+            question_count += 1
 
         combined_ws.cell(row_offset, column_offset).value = directory
         for row in range(question_count + 2):
@@ -53,12 +55,25 @@ def generate_combined_spreadsheet(args):
 
         combined_ws.cell(row_offset + question_count + 4, column_offset).value = "Total"
         for column in range(marker_count):
-            combined_ws.cell(row_offset + question_count + 4, column_offset + column + 1).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + column + 1), row_offset + 3, get_column_letter(column_offset + column + 1), row_offset + 2 + question_count)  
-        combined_ws.cell(row_offset + question_count + 4, column_offset + marker_count + 2).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + marker_count + 2), row_offset + 3, get_column_letter(column_offset + marker_count + 2), row_offset + 2 + question_count)  
-
+            combined_ws.cell(row_offset + question_count + 4, column_offset + column + 1).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + column + 1), row_offset + 3, get_column_letter(column_offset + column + 1), row_offset + 2 + question_count)
+        combined_ws.cell(row_offset + question_count + 4, column_offset + marker_count + 2).value = "=SUM({}{}:{}{})".format(get_column_letter(column_offset + marker_count + 2), row_offset + 3, get_column_letter(column_offset + marker_count + 2), row_offset + 2 + question_count)
         combined_ws.cell(row_offset + 2, column_offset + marker_count + 2).value = "Average"
         for row in range(question_count):
-            combined_ws.cell(row_offset + row + 3, column_offset + marker_count + 2).value = "=AVERAGE({}{}:{}{})".format(get_column_letter(column_offset + 1), row_offset + row + 3, get_column_letter(column_offset + marker_count + 3), row_offset + row + 3)  
+            combined_ws.cell(row_offset + row + 3, column_offset + marker_count + 2).value = "=AVERAGE({}{}:{}{})".format(get_column_letter(column_offset + 1), row_offset + row + 3, get_column_letter(column_offset + marker_count), row_offset + row + 3)
+
+        # create bar chart for marking data visualisation
+        chart = BarChart()
+        chart.type = "col"
+        chart.style = 10
+        chart.y_axis.title = "Mark Given"
+        chart.x_axis.title = "Question ID"
+        data = Reference(combined_ws, min_col=column_offset+1, min_row=row_offset+2, max_row=row_offset+question_count+2, max_col=column_offset+marker_count)
+        cats = Reference(combined_ws, min_col=column_offset, min_row=row_offset+3, max_row=row_offset+question_count+2)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(cats)
+        chart.height = 0.55 * (question_count + 5)
+        chart.width = 3 * (question_count)
+        combined_ws.add_chart(chart, "{}{}".format(get_column_letter(column_offset + marker_count + 4), row_offset))
 
         # for i in range(len(authors)):
         #     ws.cell(column=i+3, row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(3+i), 4, get_column_letter(3+i), 3+len(question_ids))
@@ -67,7 +82,7 @@ def generate_combined_spreadsheet(args):
         directory_index += 1
         row_offset += question_count + 6
 
-    combined_wb.save(filename = os.path.join(os.getcwd(), "combined_extacted_marks.xlsx"))
+    combined_wb.save(filename=os.path.join(os.getcwd(), "combined_extacted_marks.xlsx"))
 
 # def read_spreadsheet(args, authors, question_ids):
 #     wb = load_workbook(os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
@@ -86,6 +101,7 @@ def generate_combined_spreadsheet(args):
 #         overriding_marks.append(marks)
 
 #     return overriding_marks
+
 
 def main():
 
@@ -120,7 +136,7 @@ def main():
     # for directory in args.directory_list:
     #     logging.info("Collating {}.".format(directory))
     #     command_string = "python collator.py {} {}.pdf".format(directory, os.path.basename(os.path.normpath(directory)))
-        
+
     #     if args.generate_individual_spreadsheet:
     #         command_string = "{} {}".format(command_string, "--generate-spreadsheet")
 
