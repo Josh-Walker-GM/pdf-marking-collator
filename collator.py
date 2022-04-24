@@ -20,7 +20,7 @@ class MarkComment():
     mark: float = None
     
     def __init__(self, raw_annotation):
-        if raw_annotation == None:
+        if raw_annotation is None:
             return
 
         self.raw_annotation = raw_annotation
@@ -41,7 +41,7 @@ class FeedbackComment():
     type = None
 
     def __init__(self, raw_annotation):
-        if raw_annotation == None:
+        if raw_annotation is None:
             return
 
         self.raw_annotation = raw_annotation
