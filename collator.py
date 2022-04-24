@@ -13,12 +13,13 @@ import statistics
 import argparse
 import logging
 
+
 class MarkComment():
     raw_annotation = None
     author: str = None
     question_id: str = None
     mark: float = None
-    
+
     def __init__(self, raw_annotation):
         if raw_annotation is None:
             return
@@ -30,6 +31,7 @@ class MarkComment():
 
     def __str__(self):
         return "Question: {}, Mark: {}, Author: {}".format(self.question_id, self.mark, self.author)
+
 
 class FeedbackComment():
     raw_annotation = None
@@ -52,6 +54,7 @@ class FeedbackComment():
         self.flags = raw_annotation.flags
         self.type = raw_annotation.type[1]
 
+
 def get_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", metavar="input-dir", type=str, help="directory of pdf collection")
@@ -63,10 +66,11 @@ def get_arguments():
     parser.add_argument("--use-spreadsheet", type=bool, help="use spreadsheet of marks inplace of pdf markings", default=False, action=argparse.BooleanOptionalAction)
     return parser.parse_args()
 
+
 def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks: list[list[MarkComment]], question_ids: list[str]):
     wb = Workbook()
     ws = wb.active
-    
+
     # write aliases and author names
     ws.cell(column=2, row=2, value="Alias")
     ws.cell(column=2, row=3, value="Authors")
@@ -79,7 +83,7 @@ def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks
     for i in range(len(question_ids)):
         ws.cell(column=2, row=4+i, value="Q: {}".format(question_ids[i]))
     ws.cell(column=2, row=4+len(question_ids)+1, value="Total")
-    
+
     # write formulae to calculate totals of author and average marks
     for i in range(len(authors)):
         ws.cell(column=i+3, row=4+len(question_ids)+1).value = "=SUM({}{}:{}{})".format(get_column_letter(3+i), 4, get_column_letter(3+i), 3+len(question_ids))
@@ -92,9 +96,9 @@ def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks
             column_index = authors.index(mark.author)
             ws.cell(column=3+column_index, row=4+row_index).value = mark.mark
 
-    # write formulae to average the marks of each question 
+    # write formulae to average the marks of each question
     ws.cell(column=3+len(authors)+1, row=3, value="Average")
-    for i in range(len(question_ids)): 
+    for i in range(len(question_ids)):
         ws.cell(column=3+len(authors)+1, row=4+i, value="=AVERAGE({}{}:{}{})".format("C", 4+i, get_column_letter(2+len(authors)), 4+i))
 
     # create bar chart for marking data visualisation
@@ -111,7 +115,8 @@ def generate_spreadsheet(args, authors: list[str], aliases: list[str], all_marks
     ws.add_chart(chart, "{}{}".format(get_column_letter(len(authors)+6), 2))
 
     # save spreadsheet
-    wb.save(filename = os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
+    wb.save(filename=os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
+
 
 def read_spreadsheet(args, authors, question_ids):
     wb = load_workbook(os.path.join(os.getcwd(), args.input_dir, "extracted_marks.xlsx"))
@@ -130,6 +135,7 @@ def read_spreadsheet(args, authors, question_ids):
         overriding_marks.append(marks)
 
     return overriding_marks
+
 
 def main():
 
@@ -216,7 +222,7 @@ def main():
         logging.info("Using spreadsheet to override marking values.")
         all_marks = read_spreadsheet(args, authors, question_ids)
 
-    # calculate average marks 
+    # calculate average marks
     averaged_marks: dict[str, float] = {}
     extracted_marks: dict[str, list[float]] = {}
     total_averaged_mark = 0.0
@@ -242,6 +248,10 @@ def main():
                 annotation = page.add_highlight_annot(comment.rect)
             elif comment.type == "StrikeOut":
                 annotation = page.add_strikeout_annot(comment.rect)
+            elif comment.type == "Caret":
+                annotation = page.add_caret_annot([comment.rect[0], comment.rect[1]])
+            elif comment.type == "Underline":
+                annotation = page.add_underline_annot(comment.rect)
             else:
                 logging.warning("Annotation of type {} is not supported.".format(comment.type))
                 continue
@@ -277,6 +287,7 @@ def main():
     if args.generate_spreadsheet:
         logging.info("Generating spreadsheet of extracted marks.")
         generate_spreadsheet(args, authors, aliases, all_marks, question_ids)
+
 
 if __name__ == "__main__":
     main()
