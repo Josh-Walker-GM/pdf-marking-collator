@@ -271,6 +271,7 @@ def main():
     # save to an output pdf file
     document.save(os.path.join(os.getcwd(), args.input_dir, args.output_file))
     document.close()
+    logging.info("Collated pdf saved to \"{}\"".format(os.path.join(os.getcwd(), args.input_dir, args.output_file)))
 
     # generate spreadsheet of marks
     if args.generate_spreadsheet:
