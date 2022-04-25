@@ -101,7 +101,25 @@ def generate_combined_spreadsheet(args):
         row_offset += question_count + 8
 
     save_directory = os.path.abspath(os.path.join(directories[0], os.pardir))
-    combined_wb.save(filename=os.path.join(save_directory, "combined_extacted_marks.xlsx"))
+    combined_wb.save(filename=os.path.join(save_directory, "combined_extracted_marks.xlsx"))
+
+
+def use_combined_spreadsheet(args):
+
+    directories: list[str] = args.directories
+
+    combined_wb = Workbook()
+    combined_ws = combined_wb.active
+
+    row_offset = 2
+    column_offset = 2
+
+    directory_index = 0
+    for directory in directories:
+        individual_wb = load_workbook(os.path.join(directory, "extracted_marks.xlsx"))
+        individual_ws = individual_wb.active
+
+    pass
 
 
 def main():
@@ -135,15 +153,32 @@ def main():
             logging.error("Collation directory \"{}\" does not exist!".format(os.path.join(os.getcwd(), directory)))
             exit(-1)
 
+    if args.use_combined_spreadsheet:
+        logging.info("Using combined spreadsheet to override pdf marks.")
+
+        save_directory = os.path.abspath(os.path.join(directories[0], os.pardir))
+        if not os.path.exists(os.path.join(save_directory, "combined_extracted_marks.xlsx")):
+            logging.error("Combined marks spreadsheet does not exist in \"{}\"!".format(save_directory))
+            exit(-1)
+
+        # validate individual projects have extracted marks spreadsheets
+        for directory in directories:
+            if not os.path.exists(os.path.join(directory, "extracted_marks.xlsx")):
+                logging.error("Extracted marks spreadsheet does not exist for \"{}\"!".format(directory))
+                exit(-1)
+
+        use_combined_spreadsheet(args)
+        return
+
     # Dev note: Calling of commands formed from user input is dangerous - should check/sanitise this...
     for directory in directories:
         logging.info("Collating {}.".format(directory))
         command_string = "python collator.py {} {}.pdf".format(directory, os.path.basename(os.path.normpath(directory)))
 
-        if args.generate_individual_spreadsheet:
+        if args.generate_individual_spreadsheet or args.generate_combined_spreadsheet:
             command_string = "{} {}".format(command_string, "--generate-spreadsheet")
 
-        if args.use_individual_spreadsheet or args.generate_combined_spreadsheet:
+        if args.use_individual_spreadsheet:
             command_string = "{} {}".format(command_string, "--use-spreadsheet")
 
         return_code = subprocess.call(command_string, shell=True)
