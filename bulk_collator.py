@@ -4,13 +4,10 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Reference
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Border, Side, Alignment, Protection, Font
+from openpyxl.styles import PatternFill, Font
 
-import glob
 import os
 import subprocess
-import collections
-import statistics
 import argparse
 import logging
 
