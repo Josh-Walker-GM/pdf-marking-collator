@@ -108,7 +108,8 @@ def use_combined_spreadsheet(args):
 
     directories: list[str] = args.directories
 
-    combined_wb = Workbook()
+    save_directory = os.path.abspath(os.path.join(directories[0], os.pardir))
+    combined_wb = load_workbook(os.path.join(save_directory, "combined_extracted_marks.xlsx"))
     combined_ws = combined_wb.active
 
     row_offset = 2
@@ -119,7 +120,26 @@ def use_combined_spreadsheet(args):
         individual_wb = load_workbook(os.path.join(directory, "extracted_marks.xlsx"))
         individual_ws = individual_wb.active
 
-    pass
+        marker_count = 0
+        while True:
+            if combined_ws.cell(row_offset + 2, column_offset + marker_count + 1).value is None:
+                break
+            marker_count += 1
+
+        question_count = 0
+        while True:
+            if combined_ws.cell(row_offset + question_count + 3, column_offset).value is None:
+                break
+            question_count += 1
+
+        for row in range(question_count):
+            for col in range(marker_count):
+                individual_ws.cell(4 + row, 3 + col).value = combined_ws.cell(row + 3 + row_offset, col + column_offset + 1).value
+
+        individual_wb.save(filename=os.path.join(directory, "extracted_marks.xlsx"))
+
+        directory_index += 1
+        row_offset += question_count + 8
 
 
 def main():
@@ -168,7 +188,6 @@ def main():
                 exit(-1)
 
         use_combined_spreadsheet(args)
-        return
 
     # Dev note: Calling of commands formed from user input is dangerous - should check/sanitise this...
     for directory in directories:
@@ -178,7 +197,7 @@ def main():
         if args.generate_individual_spreadsheet or args.generate_combined_spreadsheet:
             command_string = "{} {}".format(command_string, "--generate-spreadsheet")
 
-        if args.use_individual_spreadsheet:
+        if args.use_individual_spreadsheet or args.use_combined_spreadsheet:
             command_string = "{} {}".format(command_string, "--use-spreadsheet")
 
         return_code = subprocess.call(command_string, shell=True)
