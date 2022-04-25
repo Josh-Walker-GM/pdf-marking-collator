@@ -143,7 +143,7 @@ def main():
         if args.generate_individual_spreadsheet:
             command_string = "{} {}".format(command_string, "--generate-spreadsheet")
 
-        if args.use_individual_spreadsheet:
+        if args.use_individual_spreadsheet or args.generate_combined_spreadsheet:
             command_string = "{} {}".format(command_string, "--use-spreadsheet")
 
         return_code = subprocess.call(command_string, shell=True)
