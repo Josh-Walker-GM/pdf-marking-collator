@@ -179,7 +179,11 @@ def main():
         for page in document:
             for annotation in page.annots():
                 if annotation.info["content"].strip().startswith(args.comment_prefix_flag):
-                    document_marks.append(MarkComment(annotation))
+                    try:
+                        document_marks.append(MarkComment(annotation))
+                    except:
+                        logging.error("Unable to parse marking comment \"{}\" in \"{}\"!".format(annotation.info["content"].strip(), pdf))
+                        exit(-1)
                 else:
                     document_comments.append(FeedbackComment(annotation))
         document.close()
